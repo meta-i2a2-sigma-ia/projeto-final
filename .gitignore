@@ -1,0 +1,30 @@
+### VisualStudioCode template
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+
+# Local History for Visual Studio Code
+.history/
+
+# Built Visual Studio Code Extensions
+*.vsix
+
+### Example user template template
+### Example user template
+
+# IntelliJ project files
+.idea
+*.iml
+out
+gen
+.terraform
+.terraform.lock.hcl
+*.iml
+terraform.tfstate
+terraform.tfstate.backup
+*.zip
+sigma-ia2a.iml
+eda/.venv

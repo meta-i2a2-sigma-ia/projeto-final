@@ -1,0 +1,13 @@
+streamlit
+pandas
+numpy
+plotly
+kaleido
+fpdf2
+langchain
+langchain-openai
+langchain-experimental
+supabase
+tabulate
+scikit-learn
+scipy
