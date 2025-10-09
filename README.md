@@ -67,8 +67,6 @@ sequenceDiagram
     S-->>U: Exibe resposta, gráfico e registra memória
 ```
 
-![diagrama-sequencia-pergunta-usuario.png](eda/images/diagrama-sequencia-pergunta-usuario.png)
-
 ### 7.2 C4 - Visão de Contexto
 ```mermaid
 graph TD
@@ -85,8 +83,6 @@ graph TD
     SYS --> CSV
 ```
 
-![c4-visao-contexto.png](eda/images/c4-visao-contexto.png)
-
 ### 7.3 C4 - Visão de Containers
 ```mermaid
 graph TD
@@ -99,7 +95,7 @@ graph TD
 
     subgraph Nuvem
         LLM[OpenAI Chat API]
-        SUPA[Supabase (opcional)]
+        SUPA[Supabase - opcional]
     end
 
     U --> UI
@@ -110,13 +106,12 @@ graph TD
     UI --> SUPA
     UI -->|Exporta| PDF[(Relatório PDF)]
 ```
-![c4-visao-container.png](eda/images/c4-visao-container.png)
 
 ### 7.4 C4 - Visão de Componentes (Container Streamlit)
 ```mermaid
 graph TD
     subgraph StreamlitApp[Container: Streamlit EDA]
-        UI[Camada UI (app.py - Streamlit)]
+        UI[Camada UI - app.py - Streamlit]
         ORCH[Orquestrador (LangChain DomainOrchestrator)]
         TOOLS[Agentes de Domínio]
         ANALYSIS[Módulo domain/analysis]
@@ -133,4 +128,3 @@ graph TD
     DF --> ANALYSIS
     UI --> PDF[(Relatório PDF)]
 ```
-![c4-visao-componente.png](eda/images/c4-visao-componente.png)
