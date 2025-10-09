@@ -112,7 +112,7 @@ graph TD
 graph TD
     subgraph StreamlitApp[Container: Streamlit EDA]
         UI[Camada UI - app.py - Streamlit]
-        ORCH[Orquestrador (LangChain DomainOrchestrator)]
+        ORCH[Orquestrador - LangChain DomainOrchestrator]
         TOOLS[Agentes de Domínio]
         ANALYSIS[Módulo domain/analysis]
         CHARTS[Módulo domain/charts]
