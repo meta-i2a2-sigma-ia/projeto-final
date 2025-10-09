@@ -3,6 +3,13 @@
 ## 0. Vídeo Explicativo do projeto
 [![Watch the video](https://i.ytimg.com/vi/y19KwloH2aE/hqdefault.jpg)](https://youtu.be/y19KwloH2aE)
 
+## O Projeto
+
+![000.1-projeto.png](eda/images/000.1-projeto.png)
+
+![000.2-projeto.png](eda/images/000.2-projeto.png)
+
+
 ## 1. Frameworks Utilizados
 - **Streamlit**: interface web para upload de CSV, configuração de credenciais e interação direta com o agente EDA.
 - **LangChain**: construção do orquestrador e dos agentes de domínio (descritivo, padrões, anomalias, visualização) com memória conversacional.
