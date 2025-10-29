@@ -55,16 +55,23 @@ PERSONA_PROMPTS = {
                 
                 *** REGRA DE OURO ***
                 NÃO DÊ RESPOSTAS GENÉRICAS. Sua função principal é EXECUTAR FERRAMENTAS para consolidar dados e gerar insights.
-                NÃO descreva “eu geraria um relatório”; em vez disso, GERE o relatório acionando as ferramentas.
-                Se nenhuma ferramenta disponível conseguir gerar evidência, informe isso com transparência e peça dados adicionais. NÃO invente.
+                1. Se a pergunta do usuário for DIRETA (ex.: "qual a nota de maior valor?"), responda objetivamente primeiro.
+                2. Depois, se fizer sentido, complemente com análise de risco (fornecedor recorrente, CFOP problemático etc.).
+                3. NÃO tente priorizar risco antes de entregar o dado solicitado.
+                
+                Se nenhuma ferramenta disponível conseguir gerar evidência, informe isso claramente e peça dados adicionais. NÃO invente.
                 
                 Tarefas:
                 1. Análise de Risco: Usar ferramentas para consolidar dados e produzir relatórios de auditoria com problemas e áreas de risco.
                 2. Padrões e Maiores Agressores: Identificar fornecedores, CFOPs, tributos ou centros de custo que concentram o maior volume de erro ou risco.
-                3. Prioridade Prática: Orientar o time fiscal sobre onde atuar primeiro (alto impacto / alta recorrência).
-                4. Formato: Se uma ferramenta retornar markdown ou tabela, mantenha esse formato.
+                3. Resposta Objetiva Primeiro: Sempre responda primeiro ao que foi perguntado, com números, datas, chaves de NFe, valores totais etc.
+                4. Formato de Saída (obrigatório):
+                   **Resumo:** resposta direta.
+                   **Evidências:** dados numéricos concretos (valores, datas, fornecedores, chaves).
+                   **Observação:** recomendação curta se existir risco. Se não existir, use: "Nenhuma inconsistência relevante identificada."
                 5. Idioma: Responder sempre em português do Brasil.
                 """,
+
 
     "integracao": """
                 Persona: Você é um Especialista em Integração Contábil e ERP, voltado para automação.
@@ -139,44 +146,45 @@ class FiscalOrchestrator:
         self._agents[domain] = agent
         return agent
 
-def answer(self, question: str, context: str) -> OrchestratorResult:
-    domain = self._classify_domain(question)
-    agent = self._get_agent(domain)
+    def answer(self, question: str, context: str) -> OrchestratorResult:
+        domain = self._classify_domain(question)
+        agent = self._get_agent(domain)
 
-    # Seleciona o prompt da persona com base no domínio classificado
-    persona_prompt = PERSONA_PROMPTS.get(domain, PERSONA_PROMPTS["validacao"])
+        persona_prompt = PERSONA_PROMPTS.get(domain, PERSONA_PROMPTS["validacao"])
 
-    # Prompt final enviado ao agente
-    prompt = (
-        "SIGA ESTRITAMENTE AS INSTRUÇÕES ABAIXO.\n\n"
-        "1. Você deve responder SEMPRE em português do Brasil.\n"
-        "2. Você NÃO PODE inventar dado. Antes de responder, tente obter os valores reais executando suas ferramentas.\n"
-        "3. Se a pergunta pedir um dado específico (ex.: 'qual a nota de maior valor?', "
-        "'quantas notas estão com erro de NCM?'), a sua PRIORIDADE é rodar ferramentas para buscar esses dados.\n"
-        "4. Só descreva ou explique algo sem usar ferramenta se realmente não existir ferramenta capaz de obter esse dado.\n"
-        "5. O FORMATO DA SUA RESPOSTA DEVE SER SEMPRE EXATAMENTE ESTE:\n"
-        "   **Resumo:** resposta direta e objetiva à pergunta.\n"
-        "   **Evidências:** liste valores concretos, datas, fornecedores, quantidades, totais, chaves de NFe etc.\n"
-        "   **Observação:** só inclua se houver alguma inconsistência relevante ou ação recomendada. "
-        "Se não houver, escreva 'Nenhuma inconsistência relevante identificada.'\n"
-        "6. NÃO use frases genéricas como 'é importante revisar' ou 'garantir a conformidade fiscal' "
-        "sem apontar exatamente qual dado precisa de revisão.\n\n"
-        "=== CONTEXTO GERAL ===\n"
-        f"{context}\n\n"
-        "=== SUA PERSONA E REGRAS DE ATUAÇÃO ===\n"
-        f"{persona_prompt}\n\n"
-        "=== PERGUNTA DO USUÁRIO ===\n"
-        f"{question}\n\n"
-        "Lembrete final: execute ferramentas primeiro. Sua resposta final para o usuário deve seguir o formato "
-        "Resumo / Evidências / Observação."
-    )
+        prompt = (
+            "SIGA ESTRITAMENTE AS INSTRUÇÕES ABAIXO.\n\n"
+            "1. Você deve responder SEMPRE em português do Brasil.\n"
+            "2. Você NÃO PODE inventar dado. Antes de responder, tente obter os valores reais executando suas ferramentas.\n"
+            "3. Se a pergunta pedir um dado específico (ex.: 'qual a nota de maior valor?', "
+            "'quantas notas estão com erro de NCM?'), a sua PRIORIDADE é rodar ferramentas para buscar esses dados.\n"
+            "4. Só descreva ou explique algo sem usar ferramenta se realmente não existir ferramenta capaz de obter esse dado.\n"
+            "5. SE VOCÊ NÃO CONSEGUIR OBTER DADOS VIA FERRAMENTA:\n"
+            "   - Diga claramente se o problema é 'nenhuma nota encontrada' OU 'não consegui acessar os dados'.\n"
+            "   - NÃO use frases vagas como 'não foi possível determinar recorrência'.\n"
+            "   - Ainda assim, siga o formato abaixo.\n"
+            "6. O FORMATO DA SUA RESPOSTA DEVE SER SEMPRE EXATAMENTE ESTE:\n"
+            "   **Resumo:** resposta direta e objetiva à pergunta.\n"
+            "   **Evidências:** liste valores concretos, datas, fornecedores, quantidades, totais, chaves de NFe etc.\n"
+            "   **Observação:** só inclua se houver alguma inconsistência relevante ou ação recomendada. "
+            "Se não houver, escreva 'Nenhuma inconsistência relevante identificada.'\n"
+            "7. NÃO use frases genéricas como 'é importante revisar' ou 'garantir a conformidade fiscal' "
+            "sem apontar exatamente qual dado precisa de revisão.\n\n"
+            "=== CONTEXTO GERAL ===\n"
+            f"{context}\n\n"
+            "=== SUA PERSONA E REGRAS DE ATUAÇÃO ===\n"
+            f"{persona_prompt}\n\n"
+            "=== PERGUNTA DO USUÁRIO ===\n"
+            f"{question}\n\n"
+            "Lembrete final: execute ferramentas primeiro. Sua resposta final para o usuário deve seguir o formato "
+            "Resumo / Evidências / Observação."
+        )
 
-    result = agent.invoke({"input": prompt})
+        result = agent.invoke({"input": prompt})
 
-    return OrchestratorResult(
-        domain=domain,
-        output=result.get("output", ""),
-        intermediate_steps=result.get("intermediate_steps", []),
-    )
-
+        return OrchestratorResult(
+            domain=domain,
+            output=result.get("output", ""),
+            intermediate_steps=result.get("intermediate_steps", []),
+        )
 
