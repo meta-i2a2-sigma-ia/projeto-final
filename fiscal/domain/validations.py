@@ -11,6 +11,7 @@ MANDATORY_COLUMNS = {
     "chave_acesso",
     "numero",
     "numero_item",
+    "descricao_item",
     "cfop",
     "ncm",
     "quantidade",
