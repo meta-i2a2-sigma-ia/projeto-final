@@ -182,7 +182,7 @@ def reset_session_state():
     st.session_state.orchestrator = None
     st.session_state["orchestrator_model"] = None
     st.session_state["orchestrator_verbose"] = None
-    st.session_state.agent_memory = None
+    st.session_state.agent_memory_state = []
     st.session_state.qa = []
     st.session_state.last_intermediate_steps = []
     st.session_state.charts = []
@@ -247,8 +247,8 @@ show_cot = st.session_state.get("show_cot_toggle", False)
 
 if "df" not in st.session_state:
     st.session_state.df = None
-if "agent_memory" not in st.session_state:
-    st.session_state.agent_memory = None
+if "agent_memory_state" not in st.session_state:
+    st.session_state.agent_memory_state = []
 if "qa" not in st.session_state:
     st.session_state.qa = []
 if "charts" not in st.session_state:

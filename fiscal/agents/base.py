@@ -23,8 +23,7 @@ def build_agent(
         verbose=verbose,
         handle_parsing_errors=True,
         return_intermediate_steps=True,
+        memory=memory,
     )
-    if memory is not None:
-        init_kwargs["memory"] = memory
     agent = initialize_agent(**init_kwargs)
     return agent
