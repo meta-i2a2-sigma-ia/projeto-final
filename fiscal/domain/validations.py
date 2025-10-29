@@ -20,9 +20,8 @@ MANDATORY_COLUMNS = {
 }
 
 _TOTAL_NOTA_FALLBACK = (
-    "valor_total_nota_original",
-    "valor_nota_fiscal",
     "valor_total_nota",
+    "valor_nota_fiscal",
 )
 
 CFOP_PREFIX_RULES = {
