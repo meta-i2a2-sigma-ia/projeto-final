@@ -101,17 +101,25 @@ def load_supabase_table(schema: str, table: str, limit: int = 20000) -> pd.DataF
     limit = int(limit or 20000)
     if limit <= 0:
         raise ValueError("'limit' deve ser maior que zero.")
+    schema_normalized = (schema or "public").strip() or "public"
+    allowed_schemas = {"public", "graphql_public"}
+    if schema_normalized not in allowed_schemas:
+        allowed = ", ".join(sorted(allowed_schemas))
+        raise ValueError(
+            "O endpoint REST do Supabase aceita apenas schemas "
+            f"{allowed}. Ajuste PG_SCHEMA ou exponha o schema desejado no Supabase."
+        )
 
-    if schema and schema != "public":
-        table_ref = sb.schema(schema).table(table)
-    else:
-        table_ref = sb.table(table)
+    table_ref = sb.table(table)
 
     chunk_size = 50000
     all_rows: list[dict[str, Any]] = []
     for start in range(0, limit, chunk_size):
         end = min(start + chunk_size - 1, limit - 1)
         response = table_ref.select("*").range(start, end).execute()
+        error = getattr(response, "error", None)
+        if error:
+            raise RuntimeError(f"Erro Supabase: {error}")
         rows = response.data or []
         if not rows:
             break

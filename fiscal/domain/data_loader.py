@@ -17,6 +17,8 @@ try:
 except Exception:  # pragma: no cover - optional dependency only when Supabase is used
     _create_supabase_client = None
 
+_ALLOWED_SUPABASE_SCHEMAS = {"public", "graphql_public"}
+
 
 # -----------------------------
 # Public API
@@ -113,17 +115,26 @@ def load_supabase_table(schema: str, table: str, limit: int = 20000) -> pd.DataF
     if not url or not key:
         raise RuntimeError("Configure SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY nas variáveis de ambiente.")
 
+    schema_normalized = (schema or "public").strip() or "public"
+    if schema_normalized not in _ALLOWED_SUPABASE_SCHEMAS:
+        allowed = ", ".join(sorted(_ALLOWED_SUPABASE_SCHEMAS))
+        raise ValueError(
+            "Supabase PostgREST está configurado para aceitar apenas os schemas "
+            f"{allowed}. Ajuste PG_SCHEMA para um desses valores ou exponha o schema desejado no Supabase."
+        )
+
     client = _create_supabase_client(url, key)
-    if schema and schema != "public":
-        table_ref = client.schema(schema).table(table)
-    else:
-        table_ref = client.table(table)
+    table_ref = client.table(table)
 
     chunk = 50000
     all_rows: List[Dict[str, Any]] = []
     for start in range(0, limit, chunk):
         end = min(start + chunk - 1, limit - 1)
-        data = table_ref.select("*").range(start, end).execute().data or []
+        response = table_ref.select("*").range(start, end).execute()
+        error = getattr(response, "error", None)
+        if error:
+            raise RuntimeError(f"Erro Supabase: {error}")
+        data = response.data or []
         if not data:
             break
         all_rows.extend(data)
