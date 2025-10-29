@@ -249,6 +249,9 @@ def _normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         canonical = _COLUMN_ALIASES.get(norm, norm)
         renamed[col] = canonical
     df = df.rename(columns=renamed)
+    if df.columns.duplicated().any():
+        # mantém a primeira ocorrência de cada coluna após normalização
+        df = df.loc[:, ~df.columns.duplicated()].copy()
 
     # enforce consistent numeric types
     for col in df.columns:
