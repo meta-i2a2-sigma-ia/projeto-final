@@ -29,6 +29,12 @@ import streamlit as st
 from fpdf import FPDF
 from langchain_openai import ChatOpenAI
 
+# Compatibilidade com versões do LangChain
+try:
+    from langchain.memory import ConversationBufferMemory
+except ImportError:  # langchain >= 0.2 move memory
+    from langchain.chains.conversation.memory import ConversationBufferMemory  # type: ignore
+
 BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
@@ -188,8 +194,9 @@ def reset_session_state():
     st.session_state.orchestrator = None
     st.session_state["orchestrator_model"] = None
     st.session_state["orchestrator_verbose"] = None
-    st.session_state.agent_memory_state = []
-    st.session_state.agent_memory = None
+    st.session_state.agent_memory = ConversationBufferMemory(
+        memory_key="chat_history", input_key="input", return_messages=True
+    )
     st.session_state.qa = []
     st.session_state.last_intermediate_steps = []
     st.session_state.charts = []
@@ -254,10 +261,10 @@ show_cot = st.session_state.get("show_cot_toggle", False)
 
 if "df" not in st.session_state:
     st.session_state.df = None
-if "agent_memory_state" not in st.session_state:
-    st.session_state.agent_memory_state = []
 if "agent_memory" not in st.session_state:
-    st.session_state.agent_memory = None
+    st.session_state.agent_memory = ConversationBufferMemory(
+        memory_key="chat_history", input_key="input", return_messages=True
+    )
 if "qa" not in st.session_state:
     st.session_state.qa = []
 if "charts" not in st.session_state:
