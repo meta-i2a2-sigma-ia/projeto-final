@@ -317,6 +317,17 @@ def _normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         if _normalize_label(col) in _STRING_ID_NORMALIZED:
             df[col] = df[col].astype(str).str.strip()
 
+    # calcula total da nota pela soma dos itens
+    if "chave_acesso" in df.columns and "valor_total_item" in df.columns:
+        totals = df.groupby("chave_acesso", dropna=False)["valor_total_item"].sum()
+        df["valor_total_nota_itens"] = df["chave_acesso"].map(totals)
+        if "valor_total_nota" not in df.columns:
+            df["valor_total_nota"] = df["valor_total_nota_itens"]
+        else:
+            if "valor_total_nota_original" not in df.columns:
+                df["valor_total_nota_original"] = df["valor_total_nota"]
+            df["valor_total_nota"] = df["valor_total_nota_itens"]
+
     if "numero_item" not in df.columns:
         df["numero_item"] = pd.NA
 

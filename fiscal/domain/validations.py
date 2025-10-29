@@ -19,7 +19,11 @@ MANDATORY_COLUMNS = {
     "valor_total_nota",
 }
 
-_TOTAL_NOTA_FALLBACK = ("valor_total_nota", "valor_nota_fiscal")
+_TOTAL_NOTA_FALLBACK = (
+    "valor_total_nota_original",
+    "valor_nota_fiscal",
+    "valor_total_nota",
+)
 
 CFOP_PREFIX_RULES = {
     "1": {"expected": ("5",), "label": "operação interna"},
