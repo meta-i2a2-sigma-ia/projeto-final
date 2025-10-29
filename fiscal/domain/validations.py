@@ -51,16 +51,20 @@ def run_core_validations(df: pd.DataFrame) -> List[ValidationResult]:
         raise ValueError(f"Colunas obrigatórias ausentes: {', '.join(sorted(missing_cols))}.")
 
     duplicate_items = _detect_duplicate_items(df)
-    if not duplicate_items.empty:
-        checks.append(
-            ValidationResult(
-                identifier="duplicate_items",
-                title="Itens duplicados na nota",
-                severity="alta",
-                conclusion="Foram identificados itens com mesma chave de acesso e número de item cadastrados mais de uma vez.",
-                details=duplicate_items,
-            )
+    duplicate_conclusion = (
+        "Foram identificados itens com mesma chave de acesso, número da nota, número do item e descrição cadastrados mais de uma vez."
+        if not duplicate_items.empty
+        else "Nenhum item duplicado foi encontrado considerando chave de acesso, número, número do item e descrição."
+    )
+    checks.append(
+        ValidationResult(
+            identifier="duplicate_items",
+            title="Itens duplicados na nota",
+            severity="alta" if not duplicate_items.empty else "baixa",
+            conclusion=duplicate_conclusion,
+            details=duplicate_items,
         )
+    )
 
     cfop_mismatch = _detect_cfop_mismatch(df)
     if not cfop_mismatch.empty:
