@@ -105,6 +105,12 @@ def save_plotly_png(fig, path: str):
     fig.write_image(path, scale=2)
 
 
+def register_chart(title: str, fig) -> None:
+    existing_titles = {item[0] for item in st.session_state.charts}
+    if title not in existing_titles:
+        st.session_state.charts.append((title, fig))
+
+
 def generate_pdf(path: str, overview: Dict[str, Any], summary_md: str, qa: List[Dict[str, str]], conclusions: str, image_paths: List[str]):
     def pdf_text(value: str) -> str:
         return value.encode("latin-1", "replace").decode("latin-1")
@@ -366,6 +372,96 @@ if st.session_state.df is not None:
             st.write("Carregue validações para gerar o ranking.")
 
         st.subheader("📊 Construtor de Gráficos")
+        recommended_insights: List[Dict[str, Any]] = []
+        if overview:
+            top_cfop_df = overview.get("top_cfop")
+            if isinstance(top_cfop_df, pd.DataFrame) and not top_cfop_df.empty:
+                top_cfop = top_cfop_df.iloc[0]
+                cfop_desc = (
+                    f"CFOP {top_cfop['cfop']} representa R$ {top_cfop['valor_total_item']:.2f} em mercadorias, "
+                    "sugerindo revisar parametrização fiscal e cadastros associados."
+                )
+                recommended_insights.append(
+                    {
+                        "title": "CFOP com maior valor movimentado",
+                        "description": cfop_desc,
+                        "chart_spec": ChartSpec(
+                            kind="Bar",
+                            x="cfop",
+                            y="valor_total_item",
+                            aggfunc="sum",
+                            color=None,
+                            bins=None,
+                        ),
+                    }
+                )
+            top_emitentes_df = offenders_emit if results and not offenders_emit.empty else None
+            if top_emitentes_df is not None and not top_emitentes_df.empty:
+                first_emit = top_emitentes_df.iloc[0]
+                emit_desc = (
+                    f"{first_emit['razao_emitente']} lidera apontamentos com {int(first_emit['ocorrencias'])} ocorrências."
+                )
+                recommended_insights.append(
+                    {
+                        "title": "Emitentes com mais apontamentos",
+                        "description": emit_desc,
+                        "chart_spec": ChartSpec(
+                            kind="Bar",
+                            x="razao_emitente",
+                            y="valor_total_item",
+                            aggfunc="sum",
+                            color=None,
+                            bins=None,
+                        ),
+                    }
+                )
+            timeline_df = overview.get("timeline")
+            if isinstance(timeline_df, pd.DataFrame) and not timeline_df.empty:
+                total_periods = len(timeline_df)
+                top_period = timeline_df.sort_values("valor", ascending=False).iloc[0]
+                timeline_desc = (
+                    f"Pico de faturamento em {top_period['competencia']} com R$ {top_period['valor']:.2f}. "
+                    "Avalie sazonalidades e ajustes de estoque."
+                )
+                recommended_insights.append(
+                    {
+                        "title": "Faturamento por competência",
+                        "description": timeline_desc,
+                        "custom_fig": px.bar(
+                            timeline_df,
+                            x="competencia",
+                            y="valor",
+                            title="Valor mensal das notas (competência)",
+                        ),
+                    }
+                )
+        if results and summary_df is not None and not summary_df.empty:
+            severe = summary_df.sort_values(["severidade", "ocorrencias"], ascending=[True, False]).iloc[0]
+            rec_desc = (
+                f"Regra crítica: {severe['regra']} ({severe['ocorrencias']} ocorrências). "
+                "Priorize correção para evitar autuações."
+            )
+            recommended_insights.append(
+                {
+                    "title": "Regra crítica a priorizar",
+                    "description": rec_desc,
+                    "chart_spec": None,
+                }
+            )
+
+        if recommended_insights:
+            st.markdown("**Insights recomendados**")
+            for idx, insight in enumerate(recommended_insights):
+                st.markdown(f"- **{insight['title']}** — {insight['description']}")
+                if insight.get("custom_fig") is not None:
+                    st.plotly_chart(insight["custom_fig"], use_container_width=True)
+                    register_chart(insight["title"], insight["custom_fig"])
+                elif insight.get("chart_spec") is not None:
+                    if st.button(f"Gerar gráfico: {insight['title']}", key=f"insight_chart_{idx}"):
+                        fig = render_chart(df, insight["chart_spec"])
+                        if fig is not None:
+                            register_chart(insight["title"], fig)
+
         numeric_cols = df.select_dtypes(include="number").columns.tolist()
         kind = st.selectbox("Tipo", ["Histogram", "Box", "Scatter", "Line", "Bar", "Correlation heatmap"])
         x = st.selectbox("Eixo X", [None] + df.columns.tolist())
@@ -377,7 +473,7 @@ if st.session_state.df is not None:
         if st.button("Gerar gráfico manual"):
             fig = render_chart(df, spec)
             if fig is not None:
-                st.session_state.charts.append((f"{kind} - {x}/{y}", fig))
+                register_chart(f"{kind} - {x}/{y}", fig)
 
     with col_side:
         st.subheader("🤖 Agente Fiscal")
