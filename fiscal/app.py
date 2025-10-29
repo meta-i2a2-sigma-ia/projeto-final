@@ -478,10 +478,13 @@ if st.session_state.df is not None:
                     img_paths.append(path)
                 except Exception as exc:
                     st.warning(f"Falha ao exportar gráfico '{title}': {exc}")
+            nota_total_col = "valor_total_nota" if "valor_total_nota" in df.columns else (
+                "valor_nota_fiscal" if "valor_nota_fiscal" in df.columns else None
+            )
             overview_copy = overview if overview else {
                 "total_notas": len(df),
                 "total_itens": len(df),
-                "valor_total_notas": float(pd.to_numeric(df.get("valor_total_nota"), errors='coerce').sum()),
+                "valor_total_notas": float(pd.to_numeric(df.get(nota_total_col), errors='coerce').sum()) if nota_total_col else 0.0,
                 "valor_total_itens": float(pd.to_numeric(df.get("valor_total_item"), errors='coerce').sum()),
             }
             summary_text = summary_df.to_markdown(index=False) if not summary_df.empty else "Sem inconsistências."

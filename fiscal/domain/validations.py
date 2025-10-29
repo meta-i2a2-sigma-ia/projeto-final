@@ -19,6 +19,8 @@ MANDATORY_COLUMNS = {
     "valor_total_nota",
 }
 
+_TOTAL_NOTA_FALLBACK = ("valor_total_nota", "valor_nota_fiscal")
+
 CFOP_PREFIX_RULES = {
     "1": {"expected": ("5",), "label": "operação interna"},
     "2": {"expected": ("6",), "label": "operação interestadual"},
@@ -39,6 +41,8 @@ def run_core_validations(df: pd.DataFrame) -> List[ValidationResult]:
     checks: List[ValidationResult] = []
 
     missing_cols = MANDATORY_COLUMNS.difference(df.columns)
+    if "valor_total_nota" in missing_cols and "valor_nota_fiscal" in df.columns:
+        missing_cols.remove("valor_total_nota")
     if missing_cols:
         raise ValueError(f"Colunas obrigatórias ausentes: {', '.join(sorted(missing_cols))}.")
 
@@ -270,18 +274,21 @@ def _detect_item_total_mismatch(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _detect_nota_total_mismatch(df: pd.DataFrame) -> pd.DataFrame:
-    work = df[["chave_acesso", "numero", "valor_total_item", "valor_total_nota"]].copy()
+    nota_total_col = next((c for c in _TOTAL_NOTA_FALLBACK if c in df.columns), None)
+    if nota_total_col is None:
+        return pd.DataFrame()
+    work = df[["chave_acesso", "numero", "valor_total_item", nota_total_col]].copy()
     sums = work.groupby(["chave_acesso", "numero"], dropna=False)["valor_total_item"].sum().reset_index(name="soma_itens")
     ref = work.drop_duplicates(subset=["chave_acesso", "numero"])
     merged = pd.merge(ref, sums, on=["chave_acesso", "numero"], how="left")
-    merged["valor_total_nota"] = pd.to_numeric(merged["valor_total_nota"], errors="coerce")
+    merged[nota_total_col] = pd.to_numeric(merged[nota_total_col], errors="coerce")
     merged["soma_itens"] = pd.to_numeric(merged["soma_itens"], errors="coerce")
-    merged["diferenca"] = (merged["valor_total_nota"] - merged["soma_itens"]).round(2)
+    merged["diferenca"] = (merged[nota_total_col] - merged["soma_itens"]).round(2)
     issues = merged[merged["diferenca"].abs() > 1.0]
     return issues[[
         "chave_acesso",
         "numero",
-        "valor_total_nota",
+        nota_total_col,
         "soma_itens",
         "diferenca",
     ]]

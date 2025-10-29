@@ -6,6 +6,7 @@ import io
 import json
 import unicodedata
 import zipfile
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -173,66 +174,74 @@ def _normalize_label(label: str) -> str:
     return cleaned
 
 
-_COLUMN_ALIASES = {
-    "chave_de_acesso": "chave_acesso",
-    "chave_de_acesso_item": "chave_acesso",
-    "chave_de_acesso_nota": "chave_acesso",
-    "modelo_nota": "modelo",
-    "modelo_item": "modelo",
-    "serie_nota": "serie",
-    "serie_item": "serie",
-    "numero_nota": "numero",
-    "numero_item": "numero_nota",
-    "natureza_da_operacao_nota": "natureza_operacao",
-    "natureza_da_operacao_item": "natureza_operacao",
-    "data_emissao_nota": "data_emissao",
-    "data_emissao_item": "data_emissao",
-    "evento_mais_recente": "evento_recente",
-    "data_hora_evento_mais_recente": "data_evento_recente",
-    "cpf_cnpj_emitente_nota": "cnpj_emitente",
-    "cpf_cnpj_emitente_item": "cnpj_emitente",
-    "razao_social_emitente_nota": "razao_emitente",
-    "razao_social_emitente_item": "razao_emitente",
-    "inscricao_estadual_emitente_nota": "ie_emitente",
-    "uf_emitente_nota": "uf_emitente",
-    "municipio_emitente_nota": "municipio_emitente",
-    "cnpj_destinatario_nota": "cnpj_destinatario",
-    "cnpj_destinatario_item": "cnpj_destinatario",
-    "nome_destinatario_nota": "razao_destinatario",
-    "nome_destinatario_item": "razao_destinatario",
-    "uf_destinatario_nota": "uf_destinatario",
-    "uf_destinatario_item": "uf_destinatario",
-    "indicador_ie_destinatario_nota": "indicador_ie",
-    "indicador_ie_destinatario_item": "indicador_ie",
-    "destino_da_operacao_nota": "destino_operacao",
-    "destino_da_operacao_item": "destino_operacao",
-    "consumidor_final_nota": "consumidor_final",
-    "presenca_do_comprador_nota": "presenca_comprador",
-    "valor_nota_fiscal": "valor_total_nota",
-    "numero_produto": "numero_item",
-    "descricao_do_produto_servico": "descricao_item",
-    "codigo_ncm_sh": "ncm",
-    "ncm_sh_tipo_de_produto": "descricao_ncm",
-    "cfop": "cfop",
-    "quantidade": "quantidade",
-    "unidade": "unidade",
-    "valor_unitario": "valor_unitario",
-    "valor_total": "valor_total_item",
-    "aliquota_icms": "aliquota_icms",
-    "valor_icms": "valor_icms",
-    "base_calculo_icms": "base_icms",
-    "aliquota_ipi": "aliquota_ipi",
-    "valor_ipi": "valor_ipi",
-    "base_calculo_ipi": "base_ipi",
+_CANONICAL_CANDIDATES: Dict[str, List[str]] = {
+    "chave_acesso": [
+        "chave_acesso",
+        "chave_de_acesso",
+        "chave_de_acesso_nota",
+        "chave_de_acesso_item",
+    ],
+    "numero": ["numero", "numero_nota"],
+    "numero_item": ["numero_item", "numero_produto"],
+    "valor_total_item": ["valor_total_item", "valor_total"],
+    "valor_total_nota": ["valor_total_nota", "valor_nota_fiscal"],
+    "quantidade": ["quantidade"],
+    "valor_unitario": ["valor_unitario"],
+    "cfop": ["cfop"],
+    "ncm": ["ncm", "codigo_ncm_sh"],
+    "descricao_item": ["descricao_item", "descricao_do_produto_servico"],
+    "descricao_ncm": ["descricao_ncm", "ncm_sh_tipo_de_produto"],
+    "aliquota_icms": ["aliquota_icms"],
+    "valor_icms": ["valor_icms"],
+    "base_icms": ["base_icms", "base_calculo_icms"],
+    "aliquota_ipi": ["aliquota_ipi"],
+    "valor_ipi": ["valor_ipi"],
+    "base_ipi": ["base_ipi", "base_calculo_ipi"],
+    "cnpj_emitente": ["cnpj_emitente", "cpf_cnpj_emitente_nota", "cpf_cnpj_emitente_item"],
+    "razao_emitente": ["razao_emitente", "razao_social_emitente_nota", "razao_social_emitente_item"],
+    "ie_emitente": ["ie_emitente", "inscricao_estadual_emitente_nota", "inscricao_estadual_emitente_item"],
+    "cnpj_destinatario": ["cnpj_destinatario", "cnpj_destinatario_nota", "cnpj_destinatario_item"],
+    "razao_destinatario": ["razao_destinatario", "nome_destinatario_nota", "nome_destinatario_item"],
+    "uf_destinatario": ["uf_destinatario", "uf_destinatario_nota", "uf_destinatario_item"],
+    "destino_operacao": ["destino_operacao", "destino_da_operacao_nota", "destino_da_operacao_item"],
+    "consumidor_final": ["consumidor_final", "consumidor_final_nota", "consumidor_final_item"],
+    "presenca_comprador": ["presenca_comprador", "presenca_do_comprador_nota", "presenca_do_comprador_item"],
+    "data_emissao": ["data_emissao", "data_emissao_nota", "data_emissao_item"],
+    "evento_recente": ["evento_recente", "evento_mais_recente"],
+    "data_evento_recente": ["data_evento_recente", "data_hora_evento_mais_recente"],
+    "natureza_operacao": ["natureza_operacao", "natureza_da_operacao_nota", "natureza_da_operacao_item"],
+    "uf_emitente": ["uf_emitente", "uf_emitente_nota", "uf_emitente_item"],
+    "municipio_emitente": ["municipio_emitente", "municipio_emitente_nota", "municipio_emitente_item"],
+    "orgao_superior_destinatario": [
+        "orgao_superior_destinatario",
+        "orgao_superior_destinatario_nota",
+        "orgao_superior_destinatario_item",
+    ],
+    "codigo_orgao_superior_destinatario": [
+        "codigo_orgao_superior_destinatario",
+        "codigo_orgao_superior_destinatario_nota",
+        "codigo_orgao_superior_destinatario_item",
+    ],
+    "orgao_destinatario": [
+        "orgao_destinatario",
+        "orgao_destinatario_nota",
+        "orgao_destinatario_item",
+    ],
+    "codigo_orgao_destinatario": [
+        "codigo_orgao_destinatario",
+        "codigo_orgao_destinatario_nota",
+        "codigo_orgao_destinatario_item",
+    ],
 }
 
-_NUMERIC_COLUMNS = {
+_NUMERIC_CANONICAL = {
     "serie",
-    "numero_nota",
-    "valor_total_item",
-    "valor_total_nota",
+    "numero",
+    "numero_item",
     "quantidade",
     "valor_unitario",
+    "valor_total_item",
+    "valor_total_nota",
     "aliquota_icms",
     "valor_icms",
     "base_icms",
@@ -241,23 +250,71 @@ _NUMERIC_COLUMNS = {
     "base_ipi",
 }
 
+_STRING_ID_NORMALIZED = {
+    "cfop",
+    "ncm",
+    "chave_acesso",
+    "cnpj_emitente",
+    "cnpj_destinatario",
+}
+
 
 def _normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    renamed: Dict[str, str] = {}
-    for col in df.columns:
-        norm = _normalize_label(col)
-        canonical = _COLUMN_ALIASES.get(norm, norm)
-        renamed[col] = canonical
-    df = df.rename(columns=renamed)
-    if df.columns.duplicated().any():
-        # mantém a primeira ocorrência de cada coluna após normalização
-        df = df.loc[:, ~df.columns.duplicated()].copy()
+    df = df.copy()
 
-    # enforce consistent numeric types
+    normalized_to_original: Dict[str, List[str]] = defaultdict(list)
     for col in df.columns:
-        if col in _NUMERIC_COLUMNS:
+        normalized_to_original[_normalize_label(col)].append(col)
+
+    # garante colunas canônicas sem perder cabeçalhos originais
+    for canonical, candidates in _CANONICAL_CANDIDATES.items():
+        for candidate in candidates:
+            normalized = _normalize_label(candidate)
+            originals = normalized_to_original.get(normalized)
+            if originals:
+                source = originals[0]
+                df[canonical] = df[source]
+                normalized_to_original.setdefault(_normalize_label(canonical), []).append(canonical)
+                break
+
+    # converte colunas numéricas (originais e canônicas) para float
+    numeric_normalized = {
+        _normalize_label(name)
+        for names in _CANONICAL_CANDIDATES.values()
+        for name in names
+        if _normalize_label(name) in {
+            "serie",
+            "serie_nota",
+            "serie_item",
+            "numero",
+            "numero_nota",
+            "numero_item",
+            "numero_produto",
+            "quantidade",
+            "valor_unitario",
+            "valor_total_item",
+            "valor_total_nota",
+            "valor_total",
+            "valor_nota_fiscal",
+            "aliquota_icms",
+            "valor_icms",
+            "base_icms",
+            "base_calculo_icms",
+            "aliquota_ipi",
+            "valor_ipi",
+            "base_ipi",
+            "base_calculo_ipi",
+        }
+    }
+    numeric_normalized.update(_normalize_label(name) for name in _NUMERIC_CANONICAL)
+
+    for col in df.columns:
+        if _normalize_label(col) in numeric_normalized:
             df[col] = pd.to_numeric(df[col], errors="coerce")
-        elif col in {"cfop", "ncm", "chave_acesso", "cnpj_emitente", "cnpj_destinatario"}:
+
+    # colunas identificadoras tratadas como string (remove espaços)
+    for col in df.columns:
+        if _normalize_label(col) in _STRING_ID_NORMALIZED:
             df[col] = df[col].astype(str).str.strip()
 
     if "numero_item" not in df.columns:
