@@ -27,4 +27,4 @@ terraform.tfstate
 terraform.tfstate.backup
 *.zip
 sigma-ia2a.iml
-eda/.venv
+eda/.venv!/terraform.tfvars
