@@ -138,3 +138,10 @@ graph TD
     DF --> ANALYSIS
     UI --> PDF[(Relatório PDF)]
 ```
+
+## 8. Módulo Fiscal (NF-e)
+- App dedicado localizado em `fiscal/app.py`, com dependências em `fiscal/requirements.txt`.
+- Replica as capacidades do módulo EDA com foco em documentos fiscais: upload de CSV/XLSX/XML/ZIP, leitura Supabase, validador automático, agente LangChain e geração de PDF.
+- Principais validações: CFOP x destino, NCM, CNPJ, cálculo de ICMS, divergência de totais e duplicidade de itens.
+- Agentes especializados: Validação, Auditoria e Integração com ERPs (Domínio, Alterdata, Protheus).
+- Execução local: `streamlit run fiscal/app.py` (defina `OPENAI_API_KEY` e, se necessário, credenciais do Supabase).

@@ -52,7 +52,19 @@ from fpdf import FPDF
 
 # LangChain (swap the provider if needed)
 from langchain_openai import ChatOpenAI
-from langchain.memory import ConversationBufferMemory
+# Compatibilidade com mudanças recentes do LangChain
+try:
+    from langchain.memory import ConversationBufferMemory
+except ModuleNotFoundError:
+    try:
+        from langchain.chains.conversation.memory import ConversationBufferMemory  # type: ignore
+    except ModuleNotFoundError:
+        try:
+            from langchain_core.memory import ConversationBufferMemory  # type: ignore
+        except ModuleNotFoundError as exc:
+            raise ModuleNotFoundError(
+                "Não foi possível importar ConversationBufferMemory. Verifique a instalação do pacote 'langchain'."
+            ) from exc
 
 BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:

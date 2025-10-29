@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
-from langchain.agents import AgentExecutor
-from langchain.memory import ConversationBufferMemory
+# Compatibilidade com mudanças de namespace no LangChain
+try:
+    from langchain.memory import ConversationBufferMemory
+except ModuleNotFoundError:
+    try:
+        from langchain.chains.conversation.memory import ConversationBufferMemory  # type: ignore
+    except ModuleNotFoundError:
+        try:
+            from langchain_core.memory import ConversationBufferMemory  # type: ignore
+        except ModuleNotFoundError as exc:
+            raise ModuleNotFoundError(
+                "Não foi possível importar ConversationBufferMemory. Verifique a instalação do pacote 'langchain'."
+            ) from exc
 from langchain_core.language_models import BaseLanguageModel
 
 from .anomalies import build_anomaly_tools
@@ -66,7 +77,7 @@ class DomainOrchestrator:
         self.llm = llm
         self.memory = memory
         self.verbose = verbose
-        self._agents: Dict[str, AgentExecutor] = {}
+        self._agents: Dict[str, Any] = {}
 
     # -----------------------------
     # Domain resolution

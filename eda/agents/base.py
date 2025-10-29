@@ -2,10 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Any, Sequence
 
-from langchain.agents import AgentExecutor, AgentType, initialize_agent
-from langchain.memory import ConversationBufferMemory
+from langchain.agents import AgentType, initialize_agent
+try:
+    from langchain.memory import ConversationBufferMemory
+except ModuleNotFoundError:
+    try:
+        from langchain.chains.conversation.memory import ConversationBufferMemory  # type: ignore
+    except ModuleNotFoundError:
+        try:
+            from langchain_core.memory import ConversationBufferMemory  # type: ignore
+        except ModuleNotFoundError as exc:
+            raise ModuleNotFoundError(
+                "Não foi possível importar ConversationBufferMemory. Verifique a instalação do pacote 'langchain'."
+            ) from exc
 from langchain.tools import BaseTool
 from langchain_core.language_models import BaseLanguageModel
 
@@ -16,7 +27,7 @@ def build_agent(
     tools: Sequence[BaseTool],
     memory: ConversationBufferMemory,
     verbose: bool = False,
-) -> AgentExecutor:
+) -> Any:
     """Create a conversational ReAct agent with the supplied tools."""
 
     agent = initialize_agent(

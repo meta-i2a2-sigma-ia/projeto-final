@@ -8,5 +8,6 @@ langchain==0.1.20
 langchain-openai==0.0.8
 supabase
 tabulate
+openpyxl
 scikit-learn
 scipy
