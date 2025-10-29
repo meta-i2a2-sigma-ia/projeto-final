@@ -172,7 +172,12 @@ def offenders_by(results: Iterable[ValidationResult], group: str) -> pd.DataFram
 
 
 def _detect_duplicate_items(df: pd.DataFrame) -> pd.DataFrame:
-    subset = df[df.duplicated(subset=["chave_acesso", "numero_item"], keep=False)].copy()
+    subset = df[
+        df.duplicated(
+            subset=["chave_acesso", "numero", "numero_item", "descricao_item"],
+            keep=False,
+        )
+    ].copy()
     return subset[[
         "chave_acesso",
         "numero",
