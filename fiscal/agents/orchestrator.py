@@ -15,7 +15,10 @@ from .auditing import build_auditing_tools
 from .base import build_agent
 from .context import AgentDataContext
 from .data_access import build_data_access_tools
+from .helpers import build_maior_nota_tool
 from .integration import build_integration_tools
+from .semantic import build_semantic_tool
+from .statistics import build_statistics_tools
 from .validation import build_validation_tools
 
 DOMAIN_LABELS = {
@@ -159,6 +162,11 @@ class FiscalOrchestrator:
             domain_tools = list(build_validation_tools(self.context, self.validation_results))
             domain = "validacao"
 
+        # Tools comuns: estatísticas, nota máxima e fallback semântico
+        common_tools = build_statistics_tools(self.context)
+        common_tools.append(build_maior_nota_tool(self.context))
+        common_tools.append(build_semantic_tool(self.context, self.llm))
+
         persona_base = PERSONA_PROMPTS.get(domain, PERSONA_PROMPTS["validacao"]).strip()
         system_message = (
             persona_base
@@ -173,7 +181,7 @@ class FiscalOrchestrator:
         shared_tools = build_data_access_tools(self.context)
         agent = build_agent(
             llm=self.llm,
-            tools=[*domain_tools, *shared_tools],
+            tools=[*domain_tools, *common_tools, *shared_tools],
             memory=self.memory,
             verbose=self.verbose,
             system_message=system_message,
