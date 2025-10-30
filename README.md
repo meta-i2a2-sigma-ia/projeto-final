@@ -1,13 +1,13 @@
 # Relatório Técnico - Agentes Autônomos
 
 ## 0. Vídeo Explicativo do projeto
-[![Watch the video](https://i.ytimg.com/vi/y19KwloH2aE/hqdefault.jpg)](https://youtu.be/y19KwloH2aE)
+[![Watch the video](https://i.ytimg.com/vi/zImwQmLr59s/hqdefault.jpg)](https://youtu.be/zImwQmLr59s)
 
 ## O Projeto
 
-![000.1-projeto.png](eda/images/000.1-projeto.png)
+![000.1-projeto.png](fiscal/images/000.1-projeto.png)
 
-![000.2-projeto.png](eda/images/000.2-projeto.png)
+![000.2-projeto.png](fiscal/images/000.2-projeto.png)
 
 
 ## 1. Frameworks Utilizados
@@ -18,7 +18,7 @@
 - **scikit-learn / pandas / numpy**: suporte analítico (clusters, correlações, estatísticas, manipulação do DataFrame). 
 
 ### 1.1 Desenho de solução
-![diagram-soluction.png](eda/images/diagram-soluction.png)
+![diagram-soluction.png](fiscal/images/diagram-soluction.png)
 
 ## 2. Estrutura da Solução
 - `app.py`: ponto central da aplicação Streamlit (upload de dados, EDA automático, interface de perguntas, geração de PDF).
@@ -29,7 +29,7 @@
 
 ## 3. Fluxo de Uso
 1. O usuário carrega um CSV (ou consulta Supabase) e informa as chaves diretamente na UI ou via `.env`.
-2. O app executa um EDA inicial (tipos, estatísticas, valores ausentes, correlações) e exibe diagnósticos automáticos (padrões temporais, outliers, clusters).
+2. O app executa um módulo inicial (tipos, estatísticas, valores ausentes, correlações) e exibe diagnósticos automáticos (padrões temporais, outliers, clusters).
 3. Cada pergunta é enviada ao orquestrador LangChain, que chama o agente adequado e responde sempre em português.
 4. Quando apropriado, o agente gera um bloco `CHART_SPEC` e a UI desenha o gráfico correspondente com Plotly.
 5. O botão “Gerar conclusões do agente” produz um resumo automático dos principais achados.
@@ -55,33 +55,41 @@ O agente mantém memória via `ConversationBufferMemory`, permitindo respostas c
 
 ## 7. Diagramas
 
-### 7.1 Sequência (Pergunta do Usuário)
+### 7.1 - Integração - Fluxo de integração entre agentes
 ```mermaid
 sequenceDiagram
-    participant U as Usuário
-    participant S as Streamlit UI
-    participant O as Orquestrador LangChain
-    participant A as Agentes de Domínio
-    participant L as LLM (ChatOpenAI)
-    participant D as DataFrame Pandas
+participant U as Usuário (Streamlit)
+participant UI as fiscal/app.py
+participant Orc as FiscalOrchestrator
+participant LLM as ChatOpenAI (OPENAI_FUNCTIONS)
+participant Tools as Ferramentas (dados/estatísticas/semântica)
 
-    U->>S: Envia pergunta / solicita gráfico
-    S->>O: Encaminha pergunta + contexto analítico
-    O->>L: Classifica domínio da pergunta
-    O->>A: Aciona ferramentas do domínio selecionado
-    A->>D: Executa consultas/estatísticas sobre o DataFrame
-    A->>L: Opcional - pede interpretação (cadeia ReAct)
-    L-->>A: Retorna raciocínio/resposta parcial
-    A-->>O: Resultado final + CHART_SPEC (opcional)
-    O-->>S: Resposta consolidada (texto e gráfico)
-    S-->>U: Exibe resposta, gráfico e registra memória
+      U->>UI: Digita pergunta ("Qual a maior nota?")
+      UI->>Orc: answer(question, context)
+
+      Orc->>LLM: Classificação de domínio<br/>(VALIDACAO/AUDITORIA/INTEGRACAO)
+      LLM-->>Orc: Domínio sugerido
+
+      Orc->>Orc: Seleciona persona e system_message<br/>Monta prompt base
+
+      Orc->>Tools: Carrega toolset do domínio<br/>+ ferramentas comuns (estatísticas, nota_extrema, analise_semantica, recarga)
+
+      Orc->>LLM: Invoca agente (prompt com contexto + pergunta)
+      alt Agente decide usar ferramenta
+          LLM->>Tools: Executa tool específica<br/>(ex.: nota_extrema)
+          Tools-->>LLM: Resultado numérico/textual
+      end
+
+      LLM-->>Orc: Resposta final formatada<br/>(**Resumo/Evidências/Observação**)
+      Orc-->>UI: OrchestratorResult (domínio + output + passos)
+      UI-->>U: Exibe resposta e cadeia de passos (se habilitado)
 ```
 
 ### 7.2 C4 - Visão de Contexto
 ```mermaid
 graph TD
     U[Usuário Analista]
-    SYS[[Sistema EDA Autônomo]]
+    SYS[[Sistema EDA/Fiscal Autônomo]]
     LLM[OpenAI Chat API]
     SUPA[Supabase]
     CSV[Arquivos CSV]
@@ -120,7 +128,7 @@ graph TD
 ### 7.4 C4 - Visão de Componentes (Container Streamlit)
 ```mermaid
 graph TD
-    subgraph StreamlitApp[Container: Streamlit EDA]
+    subgraph StreamlitApp[Container: Streamlit EDA/Fiscal]
         UI[Camada UI - app.py - Streamlit]
         ORCH[Orquestrador - LangChain DomainOrchestrator]
         TOOLS[Agentes de Domínio]
@@ -139,9 +147,21 @@ graph TD
     UI --> PDF[(Relatório PDF)]
 ```
 
+
+
 ## 8. Módulo Fiscal (NF-e)
 - App dedicado localizado em `fiscal/app.py`, com dependências em `fiscal/requirements.txt`.
-- Replica as capacidades do módulo EDA com foco em documentos fiscais: upload de CSV/XLSX/XML/ZIP, leitura Supabase, validador automático, agente LangChain e geração de PDF.
+- Replica as capacidades do módulo com foco em documentos fiscais: upload de CSV/XLSX/XML/ZIP, leitura Supabase, validador automático, agente LangChain e geração de PDF.
 - Principais validações: CFOP x destino, NCM, CNPJ, cálculo de ICMS, divergência de totais e duplicidade de itens.
 - Agentes especializados: Validação, Auditoria e Integração com ERPs (Domínio, Alterdata, Protheus).
 - Execução local: `streamlit run fiscal/app.py` (defina `OPENAI_API_KEY` e, se necessário, credenciais do Supabase).
+
+## 9. Execução com Docker
+
+| Módulo | Docker Compose | Docker Standalone |
+|--------|----------------|-------------------|
+| **EDA** | `cd eda && docker compose up --build` | `cd eda && docker build -t eda-agent . && docker run --rm -p 8501:8501 -e OPENAI_API_KEY=... eda-agent` |
+| **Fiscal** | `cd fiscal && docker compose up --build` | `cd fiscal && docker build -t fiscal-agent -f Dockerfile .. && docker run --rm -p 8502:8502 -e OPENAI_API_KEY=... fiscal-agent` |
+
+- Crie um arquivo `.env` (ou exporte variáveis) com `OPENAI_API_KEY`, `OPENAI_MODEL` e, opcionalmente, `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` antes de subir os containers.
+- Para atualizar a imagem após mudanças de código, execute `docker compose build --no-cache` no diretório do módulo correspondente.
