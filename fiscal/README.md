@@ -101,4 +101,4 @@ fiscal/
 
 ## Licença
 
-Inserir informação de licença conforme o projeto principal.
+Este projeto está licenciado sob os termos da Licença MIT. Consulte `LICENSE.md` para mais detalhes.
