@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-import pandas as pd
 try:
     from langchain.tools import Tool
 except ImportError:  # langchain >= 0.2 split_core
     from langchain_core.tools import Tool
 
 from fiscal.domain import ValidationResult, run_core_validations, summarize_issues
+from .context import AgentDataContext
 
 _CORRECTIONS: Dict[str, str] = {
     "duplicate_items": "Verifique se o ERP exportou o mesmo item mais de uma vez. Ajuste a integração para garantir unicidade por chave de acesso + número do item.",
@@ -23,17 +23,38 @@ _CORRECTIONS: Dict[str, str] = {
 }
 
 
-def build_validation_tools(df: pd.DataFrame, cached_results: Optional[List[ValidationResult]] = None) -> List[Tool]:
-    results = cached_results or run_core_validations(df)
-    index = {res.identifier: res for res in results}
+def build_validation_tools(
+    ctx: AgentDataContext,
+    cached_results: Optional[List[ValidationResult]] = None,
+) -> List[Tool]:
+    def get_results() -> List[ValidationResult]:
+        meta_results = ctx.metadata.get("validation_results")
+        if meta_results is not None:
+            return meta_results
+        if cached_results is not None:
+            ctx.metadata["validation_results"] = cached_results
+            return cached_results
+        df = ctx.require_dataframe()
+        results = run_core_validations(df)
+        ctx.metadata["validation_results"] = results
+        return results
 
     def resumo(_: str = "") -> str:
+        try:
+            results = get_results()
+        except ValueError as exc:
+            return str(exc)
         summary = summarize_issues(results)
         if summary.empty:
             return "Nenhuma inconsistência relevante foi encontrada nas validações automáticas."
         return summary.to_markdown(index=False)
 
     def detalhes(rule_id: str) -> str:
+        try:
+            results = get_results()
+        except ValueError as exc:
+            return str(exc)
+        index = {res.identifier: res for res in results}
         rule = index.get(rule_id.strip())
         if rule is None:
             available = ", ".join(index.keys()) or "nenhuma"
@@ -46,6 +67,11 @@ def build_validation_tools(df: pd.DataFrame, cached_results: Optional[List[Valid
         return f"{rule.title}\nResumo: {explanation}\nOcorrências (máx. 30 linhas):\n{body}"
 
     def sugerir_correcoes(rule_id: str) -> str:
+        try:
+            results = get_results()
+        except ValueError as exc:
+            return str(exc)
+        index = {res.identifier: res for res in results}
         rule = index.get(rule_id.strip())
         tip = _CORRECTIONS.get(rule_id.strip(), "Documente o caso para revisão manual da equipe fiscal.")
         if rule is None:

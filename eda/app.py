@@ -35,6 +35,7 @@ Notes
 - If you can't or don't want to use OpenAI, you can swap ChatOpenAI by another LangChain LLM.
 """
 
+import io
 import os
 import sys
 import textwrap
@@ -70,7 +71,7 @@ BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from agents.orchestrator import DomainOrchestrator
+from agents import AgentDataContext, DomainOrchestrator
 from domain import (
     ChartSpec,
     OUTLIER_SUGGESTIONS,
@@ -272,6 +273,18 @@ def get_secret_or_env(name: str, default: str = "") -> str:
         return default
 
 
+def get_openai_temperature(default: float = 0.3) -> float:
+    """Return the model temperature with graceful fallback when misconfigured."""
+    raw_value = get_secret_or_env("OPENAI_TEMPERATURE", str(default))
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError):
+        st.warning("OPENAI_TEMPERATURE inválido; usando padrão %.1f." % default)
+        return default
+    # clamp to a sensible range supported by OpenAI
+    return max(0.0, min(value, 2.0))
+
+
 # -----------------------------
 # Streamlit UI
 # -----------------------------
@@ -336,6 +349,8 @@ show_cot = st.session_state.get("show_cot_toggle", False)
 
 if "df" not in st.session_state:
     st.session_state.df = None
+if "agent_context" not in st.session_state:
+    st.session_state.agent_context = AgentDataContext()
 if "orchestrator" not in st.session_state:
     st.session_state.orchestrator = None
 if "agent_memory" not in st.session_state:
@@ -367,6 +382,19 @@ if df_loader_trigger:
             st.warning("Tabela vazia ou não encontrada.")
         df = coerce_numeric(df)
         st.session_state.df = df
+        context = st.session_state.agent_context
+        context.df = df
+        context.metadata.clear()
+        context.metadata.update(
+            {
+                "source": "supabase",
+                "supabase_schema": supabase_params.get("schema"),
+                "supabase_table": supabase_params.get("table"),
+                "limit": supabase_params.get("limit"),
+                "supabase_limit": supabase_params.get("limit"),
+            }
+        )
+        context.bump_version()
         reset_agent_state()
         st.success(f"Tabela carregada: {supabase_params['schema']}.{supabase_params['table']} • {df.shape[0]} linhas × {df.shape[1]} colunas")
     except Exception as e:
@@ -374,9 +402,21 @@ if df_loader_trigger:
         st.stop()
 elif uploaded is not None:
     try:
-        df = pd.read_csv(uploaded)
+        raw_bytes = uploaded.getvalue()
+        df = pd.read_csv(io.BytesIO(raw_bytes))
         df = coerce_numeric(df)
         st.session_state.df = df
+        context = st.session_state.agent_context
+        context.df = df
+        context.metadata.clear()
+        context.metadata.update(
+            {
+                "source": "upload",
+                "filename": uploaded.name,
+                "raw_bytes": raw_bytes,
+            }
+        )
+        context.bump_version()
         reset_agent_state()
         st.success(f"Arquivo carregado: {uploaded.name} • {df.shape[0]} linhas × {df.shape[1]} colunas")
     except Exception as e:
@@ -533,9 +573,12 @@ if st.session_state.df is not None:
                 or st.session_state.get("orchestrator_model") != os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
             )
             if needs_refresh:
-                llm = ChatOpenAI(model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"), temperature=0)
+                llm = ChatOpenAI(
+                    model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+                    temperature=get_openai_temperature(),
+                )
                 st.session_state.orchestrator = DomainOrchestrator(
-                    df=df,
+                    context=st.session_state.agent_context,
                     llm=llm,
                     memory=st.session_state.agent_memory,
                     verbose=show_cot,
@@ -609,7 +652,10 @@ if st.session_state.df is not None:
         if not os.environ.get("OPENAI_API_KEY"):
             st.error("Defina OPENAI_API_KEY na barra lateral.")
         else:
-            llm = ChatOpenAI(model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"), temperature=0)
+            llm = ChatOpenAI(
+                model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+                temperature=get_openai_temperature(),
+            )
             eda_summary = eda_overview(df)
             prompt = (
                 "Você é um analista de dados. Com base no resumo EDA abaixo, descreva insights, padrões, possíveis outliers e sugestões de próximos passos.\n\n"

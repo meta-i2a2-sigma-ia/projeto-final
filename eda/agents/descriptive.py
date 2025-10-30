@@ -8,12 +8,13 @@ import pandas as pd
 from langchain.tools import StructuredTool, Tool
 
 from domain import eda_overview, readable_dtype
+from .context import AgentDataContext
 
 
-def build_descriptive_tools(df: pd.DataFrame) -> List[StructuredTool]:
+def build_descriptive_tools(ctx: AgentDataContext) -> List[StructuredTool]:
     """Return tools focused on descriptive analytics for the dataframe."""
 
-    def dataset_profile_text() -> str:
+    def dataset_profile_text(df: pd.DataFrame) -> str:
         overview = eda_overview(df)
         lines = [
             "Resumo do conjunto de dados:",
@@ -42,9 +43,17 @@ def build_descriptive_tools(df: pd.DataFrame) -> List[StructuredTool]:
         return "\n".join(lines)
 
     def dataset_profile_tool(_: str = "") -> str:
-        return dataset_profile_text()
+        try:
+            df = ctx.require_dataframe()
+        except ValueError as exc:
+            return str(exc)
+        return dataset_profile_text(df)
 
     def column_summary(column: str) -> str:
+        try:
+            df = ctx.require_dataframe()
+        except ValueError as exc:
+            return str(exc)
         if column not in df.columns:
             return f"Coluna '{column}' não encontrada."
         series = df[column]

@@ -5,18 +5,22 @@ from __future__ import annotations
 import json
 from typing import List, Optional
 
-import pandas as pd
+from pandas import DataFrame
 from langchain.tools import StructuredTool, Tool
 
+from .context import AgentDataContext
 
-def build_visual_tools(df: pd.DataFrame) -> List[StructuredTool]:
-    columns = df.columns.tolist()
 
-    def list_chart_columns_text() -> str:
-        return "Colunas disponíveis para gráficos: " + ", ".join(columns)
+def build_visual_tools(ctx: AgentDataContext) -> List[StructuredTool]:
+    def list_chart_columns_text(df: DataFrame) -> str:
+        return "Colunas disponíveis para gráficos: " + ", ".join(df.columns)
 
     def list_chart_columns_tool(_: str = "") -> str:
-        return list_chart_columns_text()
+        try:
+            df = ctx.require_dataframe()
+        except ValueError as exc:
+            return str(exc)
+        return list_chart_columns_text(df)
 
     def create_chart_spec(
         kind: str,
@@ -27,6 +31,10 @@ def build_visual_tools(df: pd.DataFrame) -> List[StructuredTool]:
         agg: Optional[str] = None,
         title: Optional[str] = None,
     ) -> str:
+        try:
+            df = ctx.require_dataframe()
+        except ValueError as exc:
+            return str(exc)
         if kind not in {"Histogram", "Box", "Scatter", "Line", "Bar", "Correlation heatmap"}:
             return "Tipo de gráfico inválido. Utilize Histogram, Box, Scatter, Line, Bar ou Correlation heatmap."
         if x not in df.columns:

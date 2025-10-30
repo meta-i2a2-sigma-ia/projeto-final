@@ -19,11 +19,14 @@ except ModuleNotFoundError:
             raise ModuleNotFoundError(
                 "Não foi possível importar ConversationBufferMemory. Verifique a instalação do pacote 'langchain'."
             ) from exc
+from langchain.agents import AgentExecutor
 from langchain_core.language_models import BaseLanguageModel
 
 from .anomalies import build_anomaly_tools
 from .base import build_agent
+from .data_access import build_data_access_tools
 from .descriptive import build_descriptive_tools
+from .context import AgentDataContext
 from .patterns import build_pattern_tools
 from .visualization import build_visual_tools
 
@@ -68,15 +71,23 @@ class DomainOrchestrator:
     def __init__(
         self,
         *,
-        df: pd.DataFrame,
+        df: Optional[pd.DataFrame] = None,
+        context: Optional[AgentDataContext] = None,
         llm: BaseLanguageModel,
         memory: ConversationBufferMemory,
         verbose: bool = False,
     ) -> None:
-        self.df = df
+        if context is None:
+            if df is None:
+                raise ValueError("É necessário fornecer um dataframe ou um contexto inicial.")
+            context = AgentDataContext(df=df)
+        elif df is not None:
+            context.df = df
+        self.context = context
         self.llm = llm
         self.memory = memory
         self.verbose = verbose
+        self._context_version = self.context.version
         self._agents: Dict[str, Any] = {}
 
     # -----------------------------
@@ -110,6 +121,9 @@ class DomainOrchestrator:
     # Agent factory
     # -----------------------------
     def _get_agent(self, domain: str) -> AgentExecutor:
+        if self._context_version != self.context.version:
+            self._agents.clear()
+            self._context_version = self.context.version
         if domain in self._agents:
             return self._agents[domain]
 
@@ -124,9 +138,11 @@ class DomainOrchestrator:
             tools_builder = build_descriptive_tools
             domain = "descritivo"
 
+        domain_tools = list(tools_builder(self.context))
+        shared_tools = build_data_access_tools(self.context)
         agent = build_agent(
             llm=self.llm,
-            tools=tools_builder(self.df),
+            tools=[*domain_tools, *shared_tools],
             memory=self.memory,
             verbose=self.verbose,
         )

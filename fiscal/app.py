@@ -49,7 +49,7 @@ from fiscal.domain import (
     run_core_validations,
     summarize_issues,
 )
-from fiscal.agents import FiscalOrchestrator
+from fiscal.agents import AgentDataContext, FiscalOrchestrator
 
 # Reuse generic helpers from the EDA domain
 if str(BASE_DIR.parent / "eda") not in sys.path:
@@ -76,6 +76,17 @@ def get_secret_or_env(name: str, default: str = "") -> str:
         return st.secrets[name]
     except Exception:
         return default
+
+
+def get_openai_temperature(default: float = 0.3) -> float:
+    """Return temperature from env/secrets, falling back to default on errors."""
+    raw_value = get_secret_or_env("OPENAI_TEMPERATURE", str(default))
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError):
+        st.warning("OPENAI_TEMPERATURE inválido; usando padrão %.1f." % default)
+        return default
+    return max(0.0, min(value, 2.0))
 
 
 def render_chart(df: pd.DataFrame, spec: ChartSpec):
@@ -261,6 +272,8 @@ show_cot = st.session_state.get("show_cot_toggle", False)
 
 if "df" not in st.session_state:
     st.session_state.df = None
+if "agent_context" not in st.session_state:
+    st.session_state.agent_context = AgentDataContext()
 if "agent_memory" not in st.session_state:
     st.session_state.agent_memory = ConversationBufferMemory(
         memory_key="chat_history", input_key="input", return_messages=True
@@ -286,11 +299,24 @@ if df_loader_trigger:
             st.warning("Tabela vazia ou não encontrada.")
         df = coerce_numeric(df)
         st.session_state.df = df
+        reset_session_state()
         st.session_state.loaded_metadata = {"source": "supabase", **supabase_params}
+        context = st.session_state.agent_context
+        context.df = df
+        context.metadata.clear()
+        context.metadata.update(
+            {
+                "source": "supabase",
+                "supabase_schema": supabase_params.get("schema"),
+                "supabase_table": supabase_params.get("table"),
+                "limit": supabase_params.get("limit"),
+                "supabase_limit": supabase_params.get("limit"),
+            }
+        )
+        context.bump_version()
         st.success(
             f"Tabela carregada: {supabase_params['schema']}.{supabase_params['table']} • {df.shape[0]} linhas × {df.shape[1]} colunas"
         )
-        reset_session_state()
     except Exception as exc:
         st.error(f"Erro ao carregar do Supabase: {exc}")
         st.stop()
@@ -300,8 +326,19 @@ elif uploaded is not None:
         loaded = load_fiscal_dataframe(file_bytes=raw_bytes, filename=uploaded.name)
         df = coerce_numeric(loaded.dataframe)
         st.session_state.df = df
-        st.session_state.loaded_metadata = {"source": loaded.source, **loaded.metadata}
         reset_session_state()
+        st.session_state.loaded_metadata = {"source": loaded.source, **loaded.metadata}
+        context = st.session_state.agent_context
+        context.df = df
+        context.metadata.clear()
+        context.metadata.update(
+            {
+                "source": st.session_state.loaded_metadata.get("source", "upload"),
+                "filename": uploaded.name,
+                "raw_bytes": raw_bytes,
+            }
+        )
+        context.bump_version()
         st.success(f"Arquivo carregado: {uploaded.name} • {df.shape[0]} linhas × {df.shape[1]} colunas")
     except Exception as exc:
         st.error(f"Falha ao processar arquivo: {exc}")
@@ -358,6 +395,7 @@ if st.session_state.df is not None:
                 st.error(f"Falha ao executar validações: {exc}")
                 st.session_state.validation_results = []
         results = st.session_state.validation_results or []
+        st.session_state.agent_context.metadata["validation_results"] = results
         summary_df = summarize_issues(results)
         if summary_df.empty:
             st.success("Nenhuma inconsistência relevante identificada.")
@@ -493,13 +531,16 @@ if st.session_state.df is not None:
         """.strip()
         if st.session_state.orchestrator is None:
             try:
-                llm = ChatOpenAI(model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"), temperature=0)
+                llm = ChatOpenAI(
+                    model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+                    temperature=get_openai_temperature(),
+                )
             except Exception as exc:
                 st.error(f"Falha ao inicializar LLM: {exc}")
                 llm = None
             if llm is not None:
                 st.session_state.orchestrator = FiscalOrchestrator(
-                    df=df,
+                    context=st.session_state.agent_context,
                     llm=llm,
                     memory=st.session_state.agent_memory,
                     validation_results=st.session_state.validation_results,
@@ -557,7 +598,10 @@ if st.session_state.df is not None:
                 st.error("Defina OPENAI_API_KEY na barra lateral.")
             else:
                 try:
-                    llm = ChatOpenAI(model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"), temperature=0)
+                    llm = ChatOpenAI(
+                        model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+                        temperature=get_openai_temperature(),
+                    )
                     summary_text = summary_df.to_markdown(index=False) if not summary_df.empty else "Sem inconsistências."
                     prompt = (
                         "Você é um auditor fiscal. Com base no resumo das validações abaixo, elabore conclusões, riscos prioritários e próximos passos.\n\n"

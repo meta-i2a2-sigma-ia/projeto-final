@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-import pandas as pd
+from .context import AgentDataContext
+
 try:
     from langchain.tools import Tool
 except ImportError:
@@ -29,7 +30,7 @@ ERP_GUIDES: Dict[str, Dict[str, str]] = {
 }
 
 
-def build_integration_tools(df: pd.DataFrame) -> List[Tool]:
+def build_integration_tools(_: AgentDataContext) -> List[Tool]:
     def listar(_: str = "") -> str:
         lines = ["Integrações suportadas:"]
         for erp, meta in ERP_GUIDES.items():

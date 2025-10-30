@@ -12,13 +12,26 @@ from domain import (
     detect_clusters,
     detect_outliers,
 )
+from .context import AgentDataContext
 
 
-def build_anomaly_tools(df: pd.DataFrame) -> List[StructuredTool]:
-    numeric_cols = df.select_dtypes(include="number").columns.tolist()
+def build_anomaly_tools(ctx: AgentDataContext) -> List[StructuredTool]:
+    numeric_cols_cache = {"value": None}
 
-    def outlier_report_text() -> str:
-        out_df = detect_outliers(df, numeric_cols)
+    def get_df() -> pd.DataFrame:
+        df = ctx.require_dataframe()
+        return df
+
+    def numeric_cols(df: pd.DataFrame) -> list[str]:
+        cached = numeric_cols_cache.get("value")
+        if cached is not None and cached.get("id") is id(df):
+            return cached["cols"]
+        cols = df.select_dtypes(include="number").columns.tolist()
+        numeric_cols_cache["value"] = {"id": id(df), "cols": cols}
+        return cols
+
+    def outlier_report_text(df: pd.DataFrame) -> str:
+        out_df = detect_outliers(df, numeric_cols(df))
         if out_df.empty:
             return "Nenhum outlier relevante foi detectado usando o critério de 1.5 IQR."
         message = ["Outliers identificados por coluna:", out_df.to_string(index=False)]
@@ -27,10 +40,14 @@ def build_anomaly_tools(df: pd.DataFrame) -> List[StructuredTool]:
         return "\n".join(message)
 
     def outlier_report_tool(_: str = "") -> str:
-        return outlier_report_text()
+        try:
+            df = get_df()
+        except ValueError as exc:
+            return str(exc)
+        return outlier_report_text(df)
 
-    def cluster_report_text() -> str:
-        clusters = detect_clusters(df, numeric_cols)
+    def cluster_report_text(df: pd.DataFrame) -> str:
+        clusters = detect_clusters(df, numeric_cols(df))
         status = clusters.get("status")
         if status == "missing_dependency":
             return "scikit-learn não está instalado; instale para habilitar clusterização."
@@ -48,7 +65,11 @@ def build_anomaly_tools(df: pd.DataFrame) -> List[StructuredTool]:
             return "Nenhuma estrutura de cluster consistente foi encontrada."
 
     def cluster_report_tool(_: str = "") -> str:
-        return cluster_report_text()
+        try:
+            df = get_df()
+        except ValueError as exc:
+            return str(exc)
+        return cluster_report_text(df)
 
     tools = [
         Tool.from_function(
