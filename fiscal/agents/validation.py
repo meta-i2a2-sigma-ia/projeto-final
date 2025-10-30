@@ -11,6 +11,7 @@ except ImportError:  # langchain >= 0.2 split_core
 
 from fiscal.domain import ValidationResult, run_core_validations, summarize_issues
 from .context import AgentDataContext
+from .helpers import build_maior_nota_tool
 
 _CORRECTIONS: Dict[str, str] = {
     "duplicate_items": "Verifique se o ERP exportou o mesmo item mais de uma vez. Ajuste a integração para garantir unicidade por chave de acesso + número do item.",
@@ -78,7 +79,7 @@ def build_validation_tools(
             return tip
         return f"Para '{rule.title}': {tip}"
 
-    return [
+    tools = [
         Tool.from_function(
             func=resumo,
             name="listar_inconsistencias",
@@ -95,3 +96,6 @@ def build_validation_tools(
             description="Informa ações recomendadas para endereçar uma regra específica (use o mesmo identificador da regra).",
         ),
     ]
+
+    tools.append(build_maior_nota_tool(ctx, name="maior_nota"))
+    return tools

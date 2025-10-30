@@ -66,11 +66,19 @@ def build_data_access_tools(ctx: AgentDataContext) -> List[Tool]:
         if meta.get("source") != "upload":
             return "Nenhum arquivo enviado está vinculado ao agente no momento."
         raw = meta.get("raw_bytes")
-        if raw is None:
-            return "O conteúdo original do arquivo não está disponível para recarregar."
+        file_path = meta.get("file_path")
         try:
-            df = pd.read_csv(io.BytesIO(raw))
+            if raw is not None:
+                df = pd.read_csv(io.BytesIO(raw))
+            elif file_path:
+                df = pd.read_csv(file_path)
+            else:
+                return "O conteúdo original do arquivo não está disponível para recarregar."
         except Exception as exc:  # pragma: no cover - pandas errors
+            if file_path and raw is not None:
+                return f"Falha ao ler CSV do upload: {exc}"
+            if file_path:
+                return f"Falha ao ler CSV salvo em {file_path}: {exc}"
             return f"Falha ao ler CSV do upload: {exc}"
         ctx.df = df
         meta["rows"] = df.shape[0]

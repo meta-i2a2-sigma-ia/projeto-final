@@ -159,12 +159,24 @@ class FiscalOrchestrator:
             domain_tools = list(build_validation_tools(self.context, self.validation_results))
             domain = "validacao"
 
+        persona_base = PERSONA_PROMPTS.get(domain, PERSONA_PROMPTS["validacao"]).strip()
+        system_message = (
+            persona_base
+            + "\n\nRegras gerais:\n"
+            "1. Responda SEMPRE em português do Brasil.\n"
+            "2. Antes da resposta final, execute ferramentas para obter dados concretos.\n"
+            "3. Só finalize após ter evidências numéricas ou explicar claramente por que não foi possível obtê-las.\n"
+            "4. Formato obrigatório da resposta final: **Resumo:** ...\n**Evidências:** ...\n**Observação:** ..."
+            " (use 'Nenhuma inconsistência relevante identificada.' quando não houver observação)."
+        )
+
         shared_tools = build_data_access_tools(self.context)
         agent = build_agent(
             llm=self.llm,
             tools=[*domain_tools, *shared_tools],
             memory=self.memory,
             verbose=self.verbose,
+            system_message=system_message,
         )
         self._agents[domain] = agent
         return agent
@@ -173,34 +185,11 @@ class FiscalOrchestrator:
         domain = self._classify_domain(question)
         agent = self._get_agent(domain)
 
-        persona_prompt = PERSONA_PROMPTS.get(domain, PERSONA_PROMPTS["validacao"])
-
         prompt = (
-            "SIGA ESTRITAMENTE AS INSTRUÇÕES ABAIXO.\n\n"
-            "1. Você deve responder SEMPRE em português do Brasil.\n"
-            "2. Você NÃO PODE inventar dado. Antes de responder, tente obter os valores reais consultando informações disponíveis.\n"
-            "3. Se a pergunta pedir um dado específico (ex.: 'qual a nota de maior valor?', "
-            "'quantas notas estão com erro de NCM?'), a sua PRIORIDADE é buscar esses dados.\n"
-            "4. Só descreva ou explique algo se for capaz de obter esse dado.\n"
-            "5. SE VOCÊ NÃO CONSEGUIR OBTER DADOS:\n"
-            "   - Diga claramente se o problema é 'nenhuma nota encontrada' OU 'não consegui acessar os dados'.\n"
-            "   - NÃO use frases vagas como 'não foi possível determinar recorrência'.\n"
-            "   - Ainda assim, siga o formato abaixo.\n"
-            "6. O FORMATO DA SUA RESPOSTA DEVE SER SEMPRE EXATAMENTE ESTE:\n"
-            "   **Resumo:** resposta direta e objetiva à pergunta.\n"
-            "   **Evidências:** liste valores concretos, datas, fornecedores, quantidades, totais, chaves de NFe etc.\n"
-            "   **Observação:** só inclua se houver alguma inconsistência relevante ou ação recomendada. "
-            "Se não houver, escreva 'Nenhuma inconsistência relevante identificada.'\n"
-            "7. NÃO use frases genéricas como 'é importante revisar' ou 'garantir a conformidade fiscal' "
-            "sem apontar exatamente qual dado precisa de revisão.\n\n"
-            "=== CONTEXTO GERAL ===\n"
+            "Contexto disponível:\n"
             f"{context}\n\n"
-            "=== SUA PERSONA E REGRAS DE ATUAÇÃO ===\n"
-            f"{persona_prompt}\n\n"
-            "=== PERGUNTA DO USUÁRIO ===\n"
-            f"{question}\n\n"
-            "Lembrete final: sua resposta final para o usuário deve seguir o formato "
-            "Resumo / Evidências / Observação."
+            "Pergunta do usuário:\n"
+            f"{question}"
         )
 
         result = agent.invoke({"input": prompt})

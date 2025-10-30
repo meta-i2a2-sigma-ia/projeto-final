@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import sys
 import textwrap
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -323,11 +324,18 @@ if df_loader_trigger:
 elif uploaded is not None:
     try:
         raw_bytes = uploaded.read()
+        tmp_dir = Path("/tmp/sigma-ia2a/fiscal")
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = f"{uuid.uuid4().hex}_{Path(uploaded.name).name}"
+        file_path = tmp_dir / safe_name
+        with open(file_path, "wb") as fh:
+            fh.write(raw_bytes)
+
         loaded = load_fiscal_dataframe(file_bytes=raw_bytes, filename=uploaded.name)
         df = coerce_numeric(loaded.dataframe)
         st.session_state.df = df
         reset_session_state()
-        st.session_state.loaded_metadata = {"source": loaded.source, **loaded.metadata}
+        st.session_state.loaded_metadata = {"source": loaded.source, **loaded.metadata, "file_path": str(file_path)}
         context = st.session_state.agent_context
         context.df = df
         context.metadata.clear()
@@ -336,6 +344,7 @@ elif uploaded is not None:
                 "source": st.session_state.loaded_metadata.get("source", "upload"),
                 "filename": uploaded.name,
                 "raw_bytes": raw_bytes,
+                "file_path": str(file_path),
             }
         )
         context.bump_version()

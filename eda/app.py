@@ -39,6 +39,7 @@ import io
 import os
 import sys
 import textwrap
+import uuid
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
 
@@ -403,6 +404,13 @@ if df_loader_trigger:
 elif uploaded is not None:
     try:
         raw_bytes = uploaded.getvalue()
+        tmp_dir = Path("/tmp/sigma-ia2a/eda")
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = f"{uuid.uuid4().hex}_{Path(uploaded.name).name}"
+        file_path = tmp_dir / safe_name
+        with open(file_path, "wb") as fh:
+            fh.write(raw_bytes)
+
         df = pd.read_csv(io.BytesIO(raw_bytes))
         df = coerce_numeric(df)
         st.session_state.df = df
@@ -414,6 +422,7 @@ elif uploaded is not None:
                 "source": "upload",
                 "filename": uploaded.name,
                 "raw_bytes": raw_bytes,
+                "file_path": str(file_path),
             }
         )
         context.bump_version()

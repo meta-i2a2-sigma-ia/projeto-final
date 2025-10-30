@@ -20,24 +20,36 @@ def build_data_access_tools(ctx: AgentDataContext) -> List[Tool]:
             return "O último carregamento veio do Supabase; use a ferramenta dedicada para atualizar." \
                 " Informe um arquivo via upload para reutilizar esta ferramenta."
         raw = meta.get("raw_bytes")
+        file_path = meta.get("file_path")
+        filename = meta.get("filename", "dados_fiscais.csv")
+        if raw is None and file_path:
+            try:
+                with open(file_path, "rb") as fh:
+                    raw = fh.read()
+            except OSError as exc:
+                return f"Falha ao ler o arquivo salvo em {file_path}: {exc}"
         if raw is None:
             return "Não há conteúdo bruto do arquivo disponível para recarregar."
-        filename = meta.get("filename", "dados_fiscais.csv")
         try:
             loaded = load_fiscal_dataframe(file_bytes=raw, filename=filename)
         except Exception as exc:
             return f"Falha ao processar o arquivo '{filename}': {exc}"
         df = coerce_numeric(loaded.dataframe)
         ctx.df = df
+        preserved_path = file_path
         meta.clear()
-        meta.update({
-            "source": loaded.source,
-            **loaded.metadata,
-            "raw_bytes": raw,
-            "filename": filename,
-            "rows": df.shape[0],
-            "columns": df.shape[1],
-        })
+        meta.update(
+            {
+                "source": loaded.source,
+                **loaded.metadata,
+                "raw_bytes": raw,
+                "filename": filename,
+                "rows": df.shape[0],
+                "columns": df.shape[1],
+            }
+        )
+        if preserved_path:
+            meta["file_path"] = preserved_path
         ctx.bump_version()
         return (
             f"Dataset fiscal recarregado a partir de '{filename}' com {df.shape[0]} linhas "
