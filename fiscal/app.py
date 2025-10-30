@@ -377,18 +377,86 @@ if st.session_state.df is not None:
             m5.metric("Valor total (notas)", f"R$ {overview.get('valor_total_notas', 0):,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
             m6.metric("Valor total (itens)", f"R$ {overview.get('valor_total_itens', 0):,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
-            timeline = overview.get("timeline")
-            if isinstance(timeline, pd.DataFrame) and not timeline.empty:
-                st.plotly_chart(px.bar(timeline, x="competencia", y="valor", title="Valor mensal das notas"), use_container_width=True)
+        top_cfop = overview.get("top_cfop")
+        top_ncm = overview.get("top_ncm")
+        if isinstance(top_cfop, pd.DataFrame) and not top_cfop.empty:
+            st.write("Top CFOP por valor")
+            st.dataframe(top_cfop)
+        if isinstance(top_ncm, pd.DataFrame) and not top_ncm.empty:
+            st.write("Top NCM por valor")
+            st.dataframe(top_ncm)
 
-            top_cfop = overview.get("top_cfop")
-            top_ncm = overview.get("top_ncm")
-            if isinstance(top_cfop, pd.DataFrame) and not top_cfop.empty:
-                st.write("Top CFOP por valor")
-                st.dataframe(top_cfop)
-            if isinstance(top_ncm, pd.DataFrame) and not top_ncm.empty:
-                st.write("Top NCM por valor")
-                st.dataframe(top_ncm)
+        # Aggregations for charts
+        def aggregate_value(df: pd.DataFrame, group_col: str) -> pd.DataFrame:
+            value_series = None
+            if "valor_total_item" in df.columns:
+                value_series = pd.to_numeric(df["valor_total_item"], errors="coerce")
+            elif {"quantidade", "valor_unitario"}.issubset(df.columns):
+                qty = pd.to_numeric(df["quantidade"], errors="coerce")
+                unit = pd.to_numeric(df["valor_unitario"], errors="coerce")
+                value_series = qty * unit
+            elif "valor_nota_fiscal" in df.columns:
+                value_series = pd.to_numeric(df["valor_nota_fiscal"], errors="coerce")
+            else:
+                return pd.DataFrame()
+
+            data = df[[group_col]].copy()
+            data["valor"] = value_series
+            data = data.dropna(subset=[group_col, "valor"])
+            if data.empty:
+                return pd.DataFrame()
+            agg = (
+                data.groupby(group_col, as_index=False)["valor"].sum()
+                .sort_values("valor", ascending=False)
+            )
+            return agg
+
+        uf_candidates = [
+            "uf_emitente",
+            "emitente_uf",
+            "uf_destinatario",
+            "destinatario_uf",
+            "uf",
+            "estado_emitente",
+            "estado_destinatario",
+        ]
+        uf_col = next((col for col in uf_candidates if col in df.columns), None)
+        if uf_col:
+            value_by_uf = aggregate_value(df, uf_col)
+            if not value_by_uf.empty:
+                st.plotly_chart(
+                    px.bar(
+                        value_by_uf,
+                        x=uf_col,
+                        y="valor",
+                        title=f"Valor das notas por {uf_col}",
+                        labels={"valor": "Valor (R$)"},
+                    ),
+                    use_container_width=True,
+                )
+            else:
+                st.info("Sem dados suficientes para agrupar valores por UF.")
+        else:
+            st.info("Nenhuma coluna de UF encontrada para agregação (ex.: 'uf_emitente').")
+
+        cfop_col = "cfop" if "cfop" in df.columns else None
+        if cfop_col:
+            value_by_cfop = aggregate_value(df, cfop_col)
+            if not value_by_cfop.empty:
+                st.plotly_chart(
+                    px.bar(
+                        value_by_cfop,
+                        x=cfop_col,
+                        y="valor",
+                        title="Valor das notas por CFOP",
+                        labels={"valor": "Valor (R$)"},
+                    ),
+                    use_container_width=True,
+                )
+            else:
+                st.info("Sem dados suficientes para agrupar valores por CFOP.")
+        else:
+            st.info("Coluna 'cfop' não encontrada para gerar agregação.")
 
         st.dataframe(df.head(30))
         st.expander("Tipos de dados").write(
