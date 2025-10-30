@@ -10,11 +10,55 @@ from langchain.tools import StructuredTool
 from .context import AgentDataContext
 
 
+def _note_key_column(df: pd.DataFrame) -> Optional[str]:
+    if "chave_acesso" in df.columns:
+        return "chave_acesso"
+    if "numero" in df.columns:
+        return "numero"
+    return None
+
+
+def _compute_note_totals(df: pd.DataFrame) -> Optional[pd.DataFrame]:
+    chave_col = _note_key_column(df)
+    if chave_col is None:
+        return None
+
+    if "valor_nota_fiscal" in df.columns:
+        notas = df[[chave_col, "valor_nota_fiscal"]].copy()
+        notas["valor_nota_fiscal"] = pd.to_numeric(notas["valor_nota_fiscal"], errors="coerce")
+        notas = notas.dropna(subset=["valor_nota_fiscal"])
+        if notas.empty:
+            return None
+        agg = notas.groupby(chave_col, as_index=False)["valor_nota_fiscal"].max()
+        return agg.rename(columns={"valor_nota_fiscal": "valor_nota"})
+
+    item_series: Optional[pd.Series] = None
+    if "valor_total_item" in df.columns:
+        item_series = pd.to_numeric(df["valor_total_item"], errors="coerce")
+    elif {"quantidade", "valor_unitario"}.issubset(df.columns):
+        qtd = pd.to_numeric(df["quantidade"], errors="coerce")
+        unit = pd.to_numeric(df["valor_unitario"], errors="coerce")
+        item_series = qtd * unit
+
+    if item_series is None:
+        return None
+
+    notas = df[[chave_col]].copy()
+    notas["_valor_item"] = item_series
+    notas = notas.dropna(subset=["_valor_item"])
+    if notas.empty:
+        return None
+
+    agg = notas.groupby(chave_col, as_index=False)["_valor_item"].sum()
+    return agg.rename(columns={"_valor_item": "valor_nota"})
+
+
 def build_maior_nota_tool(ctx: AgentDataContext, name: str = "nota_extrema") -> StructuredTool:
     """Return a tool that finds the highest or lowest nota fiscal value."""
 
-    def maior_nota(tipo: str = "maior") -> str:
+    def nota_extrema(tipo: str = "maior") -> str:
         """Calcula a nota fiscal de maior ou menor valor conforme o argumento 'tipo'."""
+
         try:
             df = ctx.require_dataframe()
         except ValueError as exc:
@@ -23,70 +67,47 @@ def build_maior_nota_tool(ctx: AgentDataContext, name: str = "nota_extrema") -> 
         token = (tipo or "maior").strip().lower()
         mode = "menor" if token in {"menor", "min", "minimo", "mínimo"} else "maior"
 
-        valor_col: Optional[str] = None
-        for candidate in ("valor_total_nota", "valor_nota_fiscal", "valor_total"):
-            if candidate in df.columns:
-                valor_col = candidate
-                break
-        if valor_col is None:
+        totals = _compute_note_totals(df)
+        if totals is None or totals.empty:
             return (
-                "Não encontrei uma coluna de valor total da nota (procure por 'valor_total_nota' ou 'valor_nota_fiscal')."
+                "Não foi possível calcular o valor total das notas (verifique colunas 'valor_nota_fiscal', 'valor_total_item' ou 'quantidade'/'valor_unitario')."
             )
 
-        notas = df[[valor_col]].copy()
-        notas[valor_col] = pd.to_numeric(notas[valor_col], errors="coerce")
-        notas = notas.dropna(subset=[valor_col])
-        if notas.empty:
-            return "Não há valores numéricos válidos para calcular a maior nota."
+        chave_col = totals.columns[0]
+        valor_col = "valor_nota"
+        idx = totals[valor_col].idxmin() if mode == "menor" else totals[valor_col].idxmax()
+        target = totals.loc[idx]
+        chave_val = target[chave_col]
+        valor = float(target[valor_col])
 
-        chave_col = "chave_acesso" if "chave_acesso" in df.columns else None
-        numero_col = "numero" if "numero" in df.columns else None
-        emitente_col = "razao_emitente" if "razao_emitente" in df.columns else None
-
-        if chave_col:
-            agrupado = df[[chave_col, valor_col]].copy()
-            agrupado[valor_col] = pd.to_numeric(agrupado[valor_col], errors="coerce")
-            agrupado = agrupado.dropna(subset=[valor_col])
-            if agrupado.empty:
-                return "Não há valores válidos após consolidar as notas."
-            soma = agrupado.groupby(chave_col, as_index=False)[valor_col].sum()
-            if mode == "menor":
-                top_row = soma.loc[soma[valor_col].idxmin()]
-            else:
-                top_row = soma.loc[soma[valor_col].idxmax()]
-            chave = str(top_row[chave_col])
-            valor = float(top_row[valor_col])
-            ref_rows = df[df[chave_col] == top_row[chave_col]]
-        else:
-            idx = notas[valor_col].idxmin() if mode == "menor" else notas[valor_col].idxmax()
-            valor = float(notas.loc[idx, valor_col])
-            ref_rows = df.loc[[idx]]
-            chave = None
+        ref_rows = df[df[chave_col] == chave_val] if chave_col in df.columns else df
 
         numero = None
-        if numero_col and numero_col in ref_rows.columns:
-            numero = ref_rows[numero_col].dropna().astype(str).head(1).tolist()
+        if "numero" in ref_rows.columns:
+            numero = ref_rows["numero"].dropna().astype(str).head(1).tolist()
             numero = numero[0] if numero else None
 
         emitente = None
-        if emitente_col and emitente_col in ref_rows.columns:
-            emitente = ref_rows[emitente_col].dropna().astype(str).head(1).tolist()
+        if "razao_emitente" in ref_rows.columns:
+            emitente = ref_rows["razao_emitente"].dropna().astype(str).head(1).tolist()
             emitente = emitente[0] if emitente else None
 
         titulo = "Menor nota" if mode == "menor" else "Maior nota"
         partes = [f"{titulo} encontrada: R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")]
+        if chave_col == "chave_acesso":
+            partes.append(f"Chave de acesso: {chave_val}")
         if numero:
             partes.append(f"Número: {numero}")
-        if chave:
-            partes.append(f"Chave de acesso: {chave}")
+        elif chave_col == "numero":
+            partes.append(f"Número: {chave_val}")
         if emitente:
             partes.append(f"Emitente: {emitente}")
         return " | ".join(partes)
 
     return StructuredTool.from_function(
-        func=maior_nota,
+        func=nota_extrema,
         name=name,
         description=(
-            "Retorna a nota fiscal de maior (padrão) ou menor valor, apresentando número, chave de acesso e emitente quando disponíveis."
+            "Retorna a nota fiscal de maior (padrão) ou menor valor, considerando 'valor_nota_fiscal' quando disponível ou a soma de itens (quantidade × valor_unitario)."
         ),
     )
